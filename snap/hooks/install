@@ -33,3 +33,27 @@ chmod 644 ${SNAP_DATA}/credentials/client.config
 $SNAP/bin/sed -i 's/PASSWORD/'"${admin_token}"'/g' ${SNAP_DATA}/credentials/client.config
 ca_data=$(cat ${SNAP_DATA}/certs/ca.crt | ${SNAP}/usr/bin/base64 -w 0)
 $SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/client.config
+
+# Create the known tokens
+proxy_token=$(openssl rand -base64 32 | ${SNAP}/usr/bin/base64)
+echo "${proxy_token},system:kube-proxy,kube-proxy" > ${SNAP_DATA}/credentials/known_tokens.csv
+chmod 600 ${SNAP_DATA}/credentials/known_tokens.csv
+# TODO create a function for this
+token=$(openssl rand -base64 32 | ${SNAP}/usr/bin/base64)
+hostname=$(hostname)
+echo "${token},system:node:${hostname},kubelet,kubelet-0,\"system:nodes\"" >> ${SNAP_DATA}/credentials/known_tokens.csv
+
+# Create the proxy and kubelet kubeconfig
+cp ${SNAP}/kubelet.config.template ${SNAP_DATA}/credentials/kubelet.config
+# This is not safe. Everyone with local access can see these credentials.
+chmod 644 ${SNAP_DATA}/credentials/kubelet.config
+$SNAP/bin/sed -i 's/NAME/kubelet/g' ${SNAP_DATA}/credentials/kubelet.config
+$SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/kubelet.config
+$SNAP/bin/sed -i 's/TOKEN/'"${token}"'/g' ${SNAP_DATA}/credentials/kubelet.config
+
+cp ${SNAP}/kubelet.config.template ${SNAP_DATA}/credentials/kubeproxy.config
+# This is not safe. Everyone with local access can see these credentials.
+chmod 644 ${SNAP_DATA}/credentials/kubeproxy.config
+$SNAP/bin/sed -i 's/NAME/kubeproxy/g' ${SNAP_DATA}/credentials/kubeproxy.config
+$SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config
+$SNAP/bin/sed -i 's/TOKEN/'"${proxy_token}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config

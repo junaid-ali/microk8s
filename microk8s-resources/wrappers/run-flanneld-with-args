@@ -1,0 +1,23 @@
+#!/bin/bash
+set -ex
+export PATH="$SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$SNAP/lib:$SNAP/usr/lib:$SNAP/lib/x86_64-linux-gnu:$SNAP/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH=$SNAP_LIBRARY_PATH:$LD_LIBRARY_PATH
+
+source $SNAP/actions/common/utils.sh
+
+# TODO rewrite for snaps
+etcd_endpoints="$(cat $SNAP_DATA/args/flanneld | grep "etcd-endpoints" | tr "=" " "| awk '{print $2}')"
+# TODO get this from a file
+data='{"Network": "10.1.2.0/24", "Backend": {"Type": "vxlan"}}'
+
+if ! "${SNAP}/etcdctl" --endpoint ${etcd_endpoints} rm "/coreos.com/network/config"; then
+  echo "/coreos.com/network/config is not in etcd. Probably a first time run."
+fi
+
+"${SNAP}/etcdctl" --endpoint ${etcd_endpoints} set "/coreos.com/network/config" "$data"
+
+
+# This is really the only way I could find to get the args passed in correctly. WTF
+declare -a args="($(cat $SNAP_DATA/args/flanneld))"
+exec "$SNAP/opt/cni/bin/flanneld" "${args[@]}"
