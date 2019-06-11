@@ -11,6 +11,9 @@ import shutil
 
 
 CLUSTER_API="cluster/api/v1.0"
+snapdata_path = os.environ.get('SNAP_DATA')
+ca_cert_file = "{}/certs/ca.remote.crt".format(snapdata_path)
+server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
 
 
 def get_connection_info(master_ep, token):
@@ -25,7 +28,6 @@ def usage():
 
 
 def set_arg(arg, value, file):
-    snapdata_path = os.environ.get('SNAP_DATA')
     filename = "{}/args/{}".format(snapdata_path, file)
     filename_remote = "{}/args/{}.remote".format(snapdata_path, file)
     with open(filename_remote, 'w+') as back_fp:
@@ -43,7 +45,11 @@ def set_arg(arg, value, file):
 
 def update_flannel(etcd, master_ip):
     etcd = etcd.replace("0.0.0.0", master_ip)
-    set_arg("-etcd-endpoints", etcd, "flanneld")
+    set_arg("--etcd-endpoints", etcd, "flanneld")
+    set_arg("--etcd-cafile", ca_cert_file, "flanneld")
+    set_arg("--etcd-certfile", server_cert_file, "kube-apiserver")
+    set_arg("--etcd-keyfile", "${SNAP_DATA}/certs/server.key", "kube-apiserver")
+
     subprocess.check_call("systemctl restart snap.microk8s.daemon-flanneld.service".split())
 
 
@@ -52,7 +58,6 @@ def ca_one_line(ca):
 
 
 def create_kubeconfig(token, ca, master_ip, api_port, user):
-    snapdata_path = os.environ.get('SNAP_DATA')
     snap_path = os.environ.get('SNAP')
     config_template = "{}/{}".format(snap_path, "kubelet.config.template")
     config = "{}/credentials/{}.config".format(snapdata_path, user)
@@ -82,10 +87,32 @@ def update_kubelet(token, ca, master_ip, api_port):
 
 
 def store_remote_ca(ca):
-    snapdata_path = os.environ.get('SNAP_DATA')
-    ca_file = "{}/certs/ca.remote.crt".format(snapdata_path)
-    with open(ca_file, 'w+') as fp:
+    with open(ca_cert_file, 'w+') as fp:
         fp.write(ca)
+
+
+def get_etcd_client_cert(token, master_ep):
+    cer_req_file = "{}/certs/server.remote.csr".format(snapdata_path)
+    cmd_cert = "openssl req -new -key {SNAP_DATA}/certs/server.key -out {csr} " \
+               "-config {SNAP_DATA}/certs/csr.conf".format(SNAP_DATA=snapdata_path, csr=cer_req_file)
+    subprocess.check_call(cmd_cert.split())
+    with open(cer_req_file) as fp:
+        csr = fp.read()
+        signed = requests.get("http://{}/{}/sign-cert".format(master_ep, CLUSTER_API), {'token': token, 'request': csr})
+        info_json = signed.content.decode('utf-8')
+        info = json.loads(info_json)
+        with open(server_cert_file, "w") as cert_fp:
+            cert_fp.write(info["certificate"])
+
+
+def update_kubeapi(token, etcd, master_ip, master_ep):
+    etcd = etcd.replace("0.0.0.0", master_ip)
+    set_arg("--etcd-servers", etcd, "kube-apiserver")
+    set_arg("--etcd-cafile", "${SNAP_DATA}/certs/ca.remote.crt", "kube-apiserver")
+    get_etcd_client_cert(token, master_ep)
+    set_arg("--etcd-certfile", server_cert_file, "kube-apiserver")
+    set_arg("--etcd-keyfile", "${SNAP_DATA}/certs/server.key", "kube-apiserver")
+    subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
 
 
 def main():
@@ -122,6 +149,7 @@ def main():
     info = json.loads(connection_info_json)
     store_remote_ca(info["ca"])
     update_flannel(info["etcd"], master_ip)
+    update_kubeapi(token, info["etcd"], master_ip, master_ep)
     update_kubeproxy(info["kubeproxy"], info["ca"], master_ip, info["apiport"])
     update_kubelet(info["kubelet"], info["ca"], master_ip, info["apiport"])
 
