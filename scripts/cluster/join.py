@@ -17,8 +17,9 @@ server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
 
 
 def get_connection_info(master_ep, token):
-    connection_info = requests.get("http://{}/{}/join".format(master_ep, CLUSTER_API),
-                                   {'token': token, "hostname" : socket.gethostname()})
+    connection_info = requests.get("https://{}/{}/join".format(master_ep, CLUSTER_API),
+                                   {'token': token, "hostname" : socket.gethostname()},
+                                   verify=False)
     assert connection_info.status_code == 200
     return connection_info.content.decode('utf-8')
 
@@ -98,7 +99,9 @@ def get_etcd_client_cert(token, master_ep):
     subprocess.check_call(cmd_cert.split())
     with open(cer_req_file) as fp:
         csr = fp.read()
-        signed = requests.get("http://{}/{}/sign-cert".format(master_ep, CLUSTER_API), {'token': token, 'request': csr})
+        signed = requests.get("https://{}/{}/sign-cert".format(master_ep, CLUSTER_API),
+                              {'token': token, 'request': csr},
+                              verify=False)
         info_json = signed.content.decode('utf-8')
         info = json.loads(info_json)
         with open(server_cert_file, "w") as cert_fp:

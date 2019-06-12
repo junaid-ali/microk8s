@@ -57,7 +57,9 @@ def sign_cert():
 
 def sign_client_cert(cert_request, token):
     req_file = "{}/certs/request.{}.csr".format(snapdata_path, token)
-    sign_cmd = "openssl x509 -req -in {csr} -CA {SNAP_DATA}/certs/ca.crt -CAkey {SNAP_DATA}/certs/ca.key -CAcreateserial -out {SNAP_DATA}/certs/server.{token}.crt -days 100000".format(csr=req_file, SNAP_DATA=snapdata_path, token=token)
+    sign_cmd = "openssl x509 -req -in {csr} -CA {SNAP_DATA}/certs/ca.crt -CAkey" \
+               " {SNAP_DATA}/certs/ca.key -CAcreateserial -out {SNAP_DATA}/certs/server.{token}.crt" \
+               " -days 100000".format(csr=req_file, SNAP_DATA=snapdata_path, token=token)
 
     with open(req_file, 'w') as fp:
         fp.write(cert_request)
@@ -75,6 +77,7 @@ def add_token_to_certs_request(token):
 def remove_token_from_file(token, file):
     backup_file = "{}.backup".format(file)
     # That is a critical section. We need to protect it.
+    # We are safe sor now because flask serves one request at a time.
     with open(backup_file, 'w') as back_fp:
         with open(file, 'r') as fp:
             for _, line in enumerate(fp):
@@ -135,15 +138,14 @@ def get_arg(arg, file):
 
 
 def is_valid(token, token_type=cluster_tokens_file):
-    print("File: {}".format(token_type))
     with open(token_type) as fp:
         for _, line in enumerate(fp):
-            print("{} vs {}".format(line, token))
             if line.startswith(token):
                 return True
     return False
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", debug=True)
-
+    server_cert = "{SNAP_DATA}/certs/server.crt".format(SNAP_DATA=snapdata_path)
+    server_key = "{SNAP_DATA}/certs/server.key".format(SNAP_DATA=snapdata_path)
+    app.run(host="0.0.0.0", port=5000, ssl_context=(server_cert, server_key))
