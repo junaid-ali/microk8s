@@ -15,11 +15,11 @@ cluster_tokens_file = "{}/credentials/cluster-tokens.txt".format(snapdata_path)
 certs_request_tokens_file = "{}/credentials/certs-request-tokens.txt".format(snapdata_path)
 
 
-@app.route('/{}/join'.format(CLUSTER_API), methods=['GET'])
+@app.route('/{}/join'.format(CLUSTER_API), methods=['POST'])
 def join_node():
 
-    token = request.args.get('token')
-    hostname = request.args.get('hostname')
+    token = request.form['token']
+    hostname = request.form['hostname']
 
     if not is_valid(token):
         abort(404)
@@ -41,11 +41,11 @@ def join_node():
                    kubelet=kubelet_token,)
 
 
-@app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['GET'])
+@app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['POST'])
 def sign_cert():
 
-    token = request.args.get('token')
-    cert_request = request.args.get('request')
+    token = request.form['token']
+    cert_request = request.form['request']
 
     if not is_valid(token, certs_request_tokens_file):
         abort(404)
