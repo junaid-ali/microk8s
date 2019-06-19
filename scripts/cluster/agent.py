@@ -5,8 +5,7 @@ import string
 import random
 import subprocess
 
-from flask import Flask, jsonify, request, abort
-
+from flask import Flask, jsonify, request, abort, Response
 
 app = Flask(__name__)
 CLUSTER_API="cluster/api/v1.0"
@@ -22,7 +21,7 @@ def join_node():
     hostname = request.form['hostname']
 
     if not is_valid(token):
-        abort(404)
+        return Response("Invalid token provided.", mimetype='text/html', status=500)
 
     add_token_to_certs_request(token)
     remove_token_from_cluster(token)
@@ -48,7 +47,7 @@ def sign_cert():
     cert_request = request.form['request']
 
     if not is_valid(token, certs_request_tokens_file):
-        abort(404)
+        return Response("Invalid token provided.", mimetype='text/html', status=500)
 
     remove_token_from_file(token, certs_request_tokens_file)
     signed_cert = sign_client_cert(cert_request, token)

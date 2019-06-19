@@ -8,7 +8,10 @@ import requests
 import socket
 import json
 import shutil
+import urllib3
 
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CLUSTER_API = "cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
 ca_cert_file = "{}/certs/ca.remote.crt".format(snapdata_path)
@@ -19,7 +22,9 @@ def get_connection_info(master_ep, token):
     connection_info = requests.post("https://{}/{}/join".format(master_ep, CLUSTER_API),
                                     {'token': token, "hostname": socket.gethostname()},
                                     verify=False)
-    assert connection_info.status_code == 200
+    if connection_info.status_code != 200:
+        print("Failed to join cluster. {}".format(connection_info.content.decode('utf-8')))
+        exit(1)
     return connection_info.content.decode('utf-8')
 
 
