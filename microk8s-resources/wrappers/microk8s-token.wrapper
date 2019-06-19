@@ -5,6 +5,12 @@ set -eu
 export PATH="$SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH"
 export LD_LIBRARY_PATH="$SNAP/lib:$SNAP/usr/lib:$SNAP/lib/x86_64-linux-gnu:$SNAP/usr/lib/x86_64-linux-gnu"
 
+if [ -e ${SNAP_DATA}/var/lock/clustered.lock ]
+then
+  echo "This MicroK8s deployment is acting as a node in a cluster. Please use the microk8s.token on the master."
+  exit 0
+fi
+
 token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
 echo ${token} | sudo tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
 echo "Join node with: microk8s.join -t ${token} <master-ip>:5000"

@@ -43,6 +43,12 @@ clean_cluster() {
 
 exit_if_stopped
 
+if [ -e ${SNAP_DATA}/var/lock/clustered.lock ]
+then
+  echo "This MicroK8s deployment is acting as a node in a cluster. Please use the microk8s.reset on the master."
+  exit 0
+fi
+
 if systemctl status snap.${SNAP_NAME}.daemon-docker >& /dev/null
 then
   sudo systemctl restart snap.${SNAP_NAME}.daemon-docker

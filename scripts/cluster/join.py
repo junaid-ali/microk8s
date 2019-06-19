@@ -117,6 +117,15 @@ def update_kubeapi(token, etcd, master_ip, master_ep):
     subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
 
 
+def mark_cluster_node():
+    lock_file = "{}/var/lock/clustered.lock".format(snapdata_path)
+    open(lock_file, 'a').close()
+    os.chmod(lock_file, 0o700)
+    services = ['etcd', 'apiserver', 'apiserver-kicker', 'controller-manager', 'scheduler']
+    for service in services:
+        subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service).split())
+
+
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "ht:", ["help", "token="])
@@ -154,6 +163,7 @@ def main():
     update_kubeapi(token, info["etcd"], master_ip, master_ep)
     update_kubeproxy(info["kubeproxy"], info["ca"], master_ip, info["apiport"])
     update_kubelet(info["kubelet"], info["ca"], master_ip, info["apiport"])
+    mark_cluster_node()
 
 
 if __name__ == "__main__":
