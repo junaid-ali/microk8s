@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 import base64
+import random
+import string
 import subprocess
 import os
 import getopt
@@ -15,12 +17,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CLUSTER_API = "cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
 ca_cert_file = "{}/certs/ca.remote.crt".format(snapdata_path)
+callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
 server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
 
 
-def get_connection_info(master_ep, token):
+def get_connection_info(master_ep, token, callback_token):
     connection_info = requests.post("https://{}/{}/join".format(master_ep, CLUSTER_API),
-                                    {'token': token, "hostname": socket.gethostname()},
+                                    {"token": token, "hostname": socket.gethostname(),
+                                     "callback": callback_token},
                                     verify=False)
     if connection_info.status_code != 200:
         print("Failed to join cluster. {}".format(connection_info.content.decode('utf-8')))
@@ -131,6 +135,14 @@ def mark_cluster_node():
         subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service).split())
 
 
+def generate_callback_token():
+    token = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
+    with open(callback_token_file, "w") as fp:
+        fp.write("{}\n".format(token))
+    os.chmod(callback_token_file, 0o600)
+    return token
+
+
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "ht:", ["help", "token="])
@@ -161,7 +173,8 @@ def main():
 
     master_ep = args[0]
     master_ip = master_ep.split(":")[0]
-    connection_info_json = get_connection_info(master_ep, token)
+    callback_token = generate_callback_token()
+    connection_info_json = get_connection_info(master_ep, token, callback_token)
     info = json.loads(connection_info_json)
     store_remote_ca(info["ca"])
     update_flannel(info["etcd"], master_ip)

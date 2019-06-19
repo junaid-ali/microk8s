@@ -5,12 +5,56 @@ set -eu
 export PATH="$SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH"
 export LD_LIBRARY_PATH="$SNAP/lib:$SNAP/usr/lib:$SNAP/lib/x86_64-linux-gnu:$SNAP/usr/lib/x86_64-linux-gnu"
 
+source $SNAP/actions/common/utils.sh
+
 if [ -e ${SNAP_DATA}/var/lock/clustered.lock ]
 then
   echo "This MicroK8s deployment is acting as a node in a cluster. Please use the microk8s.token on the master."
   exit 0
 fi
 
-token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
-echo ${token} | sudo tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
-echo "Join node with: microk8s.join -t ${token} <master-ip>:5000"
+if [ "$(id -u)" != "0" ]; then
+  echo "This command must be run as root (or with sudo)"
+  exit 1
+fi
+
+if echo "$*" | grep -q -- 'help' || [ "$#" -eq 0 ]; then
+  echo "Usage: microk8s.token COMMAND"
+  echo "Manage cluster joining tokens"
+  echo "Example: microk8s.token generate"
+  echo
+  echo "Available commands:"
+  echo
+  echo "  generate:         generate a new token"
+  echo "  list:             list all active tokens"
+  echo "  revoke <token>:   revoke an active token"
+  echo "  help:             show this help message"
+  exit 0
+fi
+
+exit_if_stopped
+
+case $1 in
+  generate)
+    token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
+    echo ${token} | tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
+    echo "Join node with: microk8s.join -t ${token} <master-ip>:5000"
+    ;;
+
+  list)
+    echo "Available tokens"
+    if [ -e "$SNAP_DATA/credentials/cluster-tokens.txt" ]
+    then
+      cat $SNAP_DATA/credentials/cluster-tokens.txt
+    fi
+    ;;
+
+  revoke)
+    "${SNAP}/bin/sed" -i '/'"$2"'/d' "$SNAP_DATA/credentials/cluster-tokens.txt"
+    echo "Token removed"
+    ;;
+
+  *)
+    echo "Unknown option. See usage with --help."
+    ;;
+esac

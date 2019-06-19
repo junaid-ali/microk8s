@@ -1,4 +1,5 @@
 #!flask/bin/python
+import json
 import os
 import shutil
 import string
@@ -11,47 +12,56 @@ app = Flask(__name__)
 CLUSTER_API="cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
 cluster_tokens_file = "{}/credentials/cluster-tokens.txt".format(snapdata_path)
+callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
+callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
 certs_request_tokens_file = "{}/credentials/certs-request-tokens.txt".format(snapdata_path)
 
 
-@app.route('/{}/join'.format(CLUSTER_API), methods=['POST'])
-def join_node():
-
-    token = request.form['token']
-    hostname = request.form['hostname']
-
-    if not is_valid(token):
-        return Response("Invalid token provided.", mimetype='text/html', status=500)
-
-    add_token_to_certs_request(token)
-    remove_token_from_cluster(token)
-
-    ca = getCA()
-    etcd_ep = get_arg('--listen-client-urls', 'etcd')
-    api_port = get_arg('--secure-port', 'kube-apiserver')
-    proxy_token = get_token('kube-proxy')
-    kubelet_token = add_kubelet_token(hostname)
-    subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
-
-    return jsonify(ca=ca,
-                   etcd=etcd_ep,
-                   kubeproxy=proxy_token,
-                   apiport=api_port,
-                   kubelet=kubelet_token,)
+def get_service_name(service):
+    if service in ["kube-proxy", "kube-apiserver", "kube-scheduler", "kube-controller-manager"]:
+        return service[len("kube-"),:]
+    else:
+        return service
 
 
-@app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['POST'])
-def sign_cert():
+def update_service_argument(service, key, val):
+    args_file = "{}/args/{}".format(snapdata_path, get_service_name(service))
+    args_file_tmp = "{}/args/{}.tmp".format(snapdata_path, get_service_name(service))
+    found = False
+    with open(args_file_tmp, "w+") as bfp:
+        with open(args_file, "r+") as fp:
+            for _, line in enumerate(fp):
+                if line.startswith(key):
+                    if val is not None:
+                        bfp.write("{}={}\n".format(key, val))
+                    found = True
+                else:
+                    bfp.write(line)
+        if not found and val is not None:
+            bfp.write("{}={}\n".format(key, val))
 
-    token = request.form['token']
-    cert_request = request.form['request']
+    shutil.move(args_file_tmp, args_file)
 
-    if not is_valid(token, certs_request_tokens_file):
-        return Response("Invalid token provided.", mimetype='text/html', status=500)
 
-    remove_token_from_file(token, certs_request_tokens_file)
-    signed_cert = sign_client_cert(cert_request, token)
-    return jsonify(certificate=signed_cert)
+def store_callback_token(hostname, callback_token):
+    tmpfile = "{}.tmp".format(callback_tokens_file)
+    if not os.path.isfile(callback_tokens_file):
+        open(callback_tokens_file, 'a+')
+        os.chmod(callback_tokens_file, 0o600)
+    with open(tmpfile, "w") as backup_fp:
+        os.chmod(tmpfile, 0o600)
+        found = False
+        with open(callback_tokens_file, 'r+') as callback_fp:
+            for _, line in enumerate(callback_fp):
+                if line.startswith(hostname):
+                    backup_fp.write("{} {}\n".format(hostname, callback_token))
+                    found = True
+                else:
+                    backup_fp.write(line)
+        if not found:
+            backup_fp.write("{} {}\n".format(hostname, callback_token))
+
+    shutil.move(tmpfile, callback_tokens_file)
 
 
 def sign_client_cert(cert_request, token):
@@ -103,6 +113,10 @@ def get_token(name):
 
 def add_kubelet_token(hostname):
     file = "{}/credentials/known_tokens.csv".format(snapdata_path)
+    old_token = get_token("system:node:{}".format(hostname))
+    if old_token:
+        return old_token.rstrip()
+
     alpha = string.ascii_letters + string.digits
     token = ''.join(random.SystemRandom().choice(alpha) for _ in range(32))
     uid = ''.join(random.SystemRandom().choice(string.digits) for _ in range(8))
@@ -142,6 +156,104 @@ def is_valid(token, token_type=cluster_tokens_file):
             if line.startswith(token):
                 return True
     return False
+
+@app.route('/{}/join'.format(CLUSTER_API), methods=['POST'])
+def join_node():
+
+    token = request.form['token']
+    hostname = request.form['hostname']
+    callback_token = request.form['callback']
+
+    if not is_valid(token):
+        return Response("Invalid token provided.", mimetype='text/html', status=500)
+
+    add_token_to_certs_request(token)
+    remove_token_from_cluster(token)
+
+    store_callback_token(hostname, callback_token)
+
+    ca = getCA()
+    etcd_ep = get_arg('--listen-client-urls', 'etcd')
+    api_port = get_arg('--secure-port', 'kube-apiserver')
+    proxy_token = get_token('kube-proxy')
+    kubelet_token = add_kubelet_token(hostname)
+    subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
+
+    return jsonify(ca=ca,
+                   etcd=etcd_ep,
+                   kubeproxy=proxy_token,
+                   apiport=api_port,
+                   kubelet=kubelet_token,)
+
+
+@app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['POST'])
+def sign_cert():
+
+    token = request.form['token']
+    cert_request = request.form['request']
+
+    if not is_valid(token, certs_request_tokens_file):
+        return Response("Invalid token provided.", mimetype='text/html', status=500)
+
+    remove_token_from_file(token, certs_request_tokens_file)
+    signed_cert = sign_client_cert(cert_request, token)
+    return jsonify(certificate=signed_cert)
+
+
+@app.route('/{}/configure'.format(CLUSTER_API), methods=['POST'])
+def configure():
+
+    callback_token = request.form['callback']
+    if not is_valid(callback_token, callback_token_file):
+        return Response("Invalid token provided.", mimetype='text/html', status=500)
+
+    configuration = json.loads(request.form['configuration'])
+    # We expect something like this:
+    '''
+    {
+      "service":
+      [
+        {
+          "name": "kubelet",
+          "arguments_remove":
+          [
+            "myoldarg"
+          ],
+          "arguments_update":
+          [
+            {"myarg": "myvalue"},
+            {"myarg2": "myvalue2"},
+            {"myarg3": "myvalue3"}
+          ],
+          "restart": false
+        },
+        {
+          "name": "kube-proxy",
+          "restart": true
+        }
+      ]
+    }
+    '''
+
+    for service in configuration["service"]:
+        print("{}".format(service["name"]))
+        if "arguments_update" in service:
+            print("Updating arguments")
+            for argument in service["arguments_update"]:
+                for key, val in argument.items():
+                    print("{} is {}".format(key, val))
+                    update_service_argument(service["name"], key, val)
+        if "arguments_remove" in service:
+            print("Removing arguments")
+            for argument in service["arguments_remove"]:
+                print("{}".format(argument))
+                update_service_argument(service["name"], argument, None)
+        if "restart" in service and service["restart"]:
+            service_name = get_service_name(service["name"])
+            print("restarting {}".format(service["name"]))
+            subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service_name).split())
+
+    return "ok"
 
 
 if __name__ == '__main__':
