@@ -35,7 +35,6 @@ def get_connection_info(master_ip, master_port, token, callback_token):
 
 def usage():
     print("Join a cluster:             microk8s.join <master>:<port> --token=<token>")
-    print("Depart from the cluster:    microk8s.join reset")
 
 
 def set_arg(arg, value, file):
