@@ -103,7 +103,7 @@ def store_remote_ca(ca):
         fp.write(ca)
 
 
-def get_etcd_client_cert(token, master_ip, master_port):
+def get_etcd_client_cert(master_ip, master_port, token):
     cer_req_file = "{}/certs/server.remote.csr".format(snapdata_path)
     cmd_cert = "openssl req -new -key {SNAP_DATA}/certs/server.key -out {csr} " \
                "-config {SNAP_DATA}/certs/csr.conf".format(SNAP_DATA=snapdata_path, csr=cer_req_file)
@@ -150,22 +150,21 @@ def reset_node():
     os.remove(server_cert_file)
 
     for config_file in ["kubelet", "flanneld", "kube-proxy"]:
-        shutil.copyfile("{}/args/{}".format(snapdata_path, config_file),
-                        "{}/default-args/{}".format(snap_path, config_file))
+        shutil.copyfile("{}/default-args/{}".format(snap_path, config_file),
+                        "{}/args/{}".format(snapdata_path, config_file))
 
     for user in ["kubeproxy", "kubelet"]:
         config = "{}/credentials/{}.config".format(snapdata_path, user)
         shutil.copyfile("{}.backup".format(config), config)
 
-    subprocess.check_call("{}/bin/microk8s.stop".format(snap_path).split())
-    subprocess.check_call("{}/bin/microk8s.start".format(snap_path).split())
+    subprocess.check_call("{}/microk8s-stop.wrapper".format(snap_path).split())
+    subprocess.check_call("{}/microk8s-start.wrapper".format(snap_path).split())
 
 
 def main():
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "ht:", ["help", "token="])
     except getopt.GetoptError as err:
-        # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
         usage()
         sys.exit(2)
