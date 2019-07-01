@@ -157,6 +157,14 @@ def is_valid(token, token_type=cluster_tokens_file):
                 return True
     return False
 
+
+def read_kubelet_args_file():
+    filename = "{}/args/kubelet".format(snapdata_path)
+    with open(filename) as fp:
+        args = fp.read()
+        return args
+
+
 @app.route('/{}/join'.format(CLUSTER_API), methods=['POST'])
 def join_node():
 
@@ -178,12 +186,14 @@ def join_node():
     proxy_token = get_token('kube-proxy')
     kubelet_token = add_kubelet_token(hostname)
     subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
+    kubelet_args = read_kubelet_args_file()
 
     return jsonify(ca=ca,
                    etcd=etcd_ep,
                    kubeproxy=proxy_token,
                    apiport=api_port,
-                   kubelet=kubelet_token,)
+                   kubelet=kubelet_token,
+                   kubelet_args=kubelet_args)
 
 
 @app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['POST'])

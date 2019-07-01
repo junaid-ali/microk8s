@@ -143,6 +143,12 @@ def generate_callback_token():
     return token
 
 
+def store_base_kubelet_args(args_string):
+    args_file = "{}/args/kubelet".format(snapdata_path)
+    with open(args_file, "w") as fp:
+        fp.write(args_string)
+
+
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "ht:", ["help", "token="])
@@ -176,6 +182,7 @@ def main():
     callback_token = generate_callback_token()
     connection_info_json = get_connection_info(master_ep, token, callback_token)
     info = json.loads(connection_info_json)
+    store_base_kubelet_args(info["kubelet_args"])
     store_remote_ca(info["ca"])
     update_flannel(info["etcd"], master_ip)
     update_kubeapi(token, info["etcd"], master_ip, master_ep)
