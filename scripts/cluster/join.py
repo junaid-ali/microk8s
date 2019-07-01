@@ -16,6 +16,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CLUSTER_API = "cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
+snap_path = os.environ.get('SNAP')
 ca_cert_file = "{}/certs/ca.remote.crt".format(snapdata_path)
 callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
 server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
@@ -33,7 +34,8 @@ def get_connection_info(master_ep, token, callback_token):
 
 
 def usage():
-    print("usage: microk8s.join --token=<token> <master:port>")
+    print("Join a cluster:             microk8s.join <master>:<port> --token=<token>")
+    print("Depart from the cluster:    microk8s.join reset")
 
 
 def set_arg(arg, value, file):
@@ -149,9 +151,28 @@ def store_base_kubelet_args(args_string):
         fp.write(args_string)
 
 
+def reset_node():
+    lock_file = "{}/var/lock/clustered.lock".format(snapdata_path)
+    os.remove(lock_file)
+    os.remove(ca_cert_file)
+    os.remove(callback_token_file)
+    os.remove(server_cert_file)
+
+    for config_file in ["kubelet", "flanneld", "kube-proxy"]:
+        shutil.copyfile("{}/args/{}".format(snapdata_path, config_file),
+                        "{}/default-args/{}".format(snap_path, config_file))
+
+    for user in ["kubeproxy", "kubelet"]:
+        config = "{}/credentials/{}.config".format(snapdata_path, user)
+        shutil.copyfile("{}.backup".format(config), config)
+
+    subprocess.check_call("{}/bin/microk8s.stop".format(snap_path).split())
+    subprocess.check_call("{}/bin/microk8s.start".format(snap_path).split())
+
+
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "ht:", ["help", "token="])
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "ht:", ["help", "token="])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -167,28 +188,30 @@ def main():
         else:
             assert False, "unhandled option"
 
-    if token is None:
-        print("Please provide a token.")
-        usage()
-        sys.exit()
+    if args[0] == "reset":
+        reset_node()
+    else:
+        if token is None:
+            print("Please provide a token.")
+            usage()
+            sys.exit()
 
-    if len(args) <= 0:
-        print("Please provide a master endpoint.")
-        usage()
-        sys.exit()
+        if len(args) <= 0:
+            print("Please provide a master endpoint and a token.")
+            usage()
+            sys.exit()
 
-    master_ep = args[0]
-    master_ip = master_ep.split(":")[0]
-    callback_token = generate_callback_token()
-    connection_info_json = get_connection_info(master_ep, token, callback_token)
-    info = json.loads(connection_info_json)
-    store_base_kubelet_args(info["kubelet_args"])
-    store_remote_ca(info["ca"])
-    update_flannel(info["etcd"], master_ip)
-    update_kubeapi(token, info["etcd"], master_ip, master_ep)
-    update_kubeproxy(info["kubeproxy"], info["ca"], master_ip, info["apiport"])
-    update_kubelet(info["kubelet"], info["ca"], master_ip, info["apiport"])
-    mark_cluster_node()
+        master_ep = args[0]
+        master_ip = master_ep.split(":")[0]
+        callback_token = generate_callback_token()
+        connection_info_json = get_connection_info(master_ep, token, callback_token)
+        info = json.loads(connection_info_json)
+        store_base_kubelet_args(info["kubelet_args"])
+        store_remote_ca(info["ca"])
+        update_flannel(info["etcd"], master_ip)
+        update_kubeproxy(info["kubeproxy"], info["ca"], master_ip, info["apiport"])
+        update_kubelet(info["kubelet"], info["ca"], master_ip, info["apiport"])
+        mark_cluster_node()
 
 
 if __name__ == "__main__":

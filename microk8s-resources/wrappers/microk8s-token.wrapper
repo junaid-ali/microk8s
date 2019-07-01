@@ -38,7 +38,7 @@ case $1 in
   generate)
     token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
     echo ${token} | tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
-    echo "Join node with: microk8s.join -t ${token} <master-ip>:5000"
+    echo "Join node with: microk8s.join <master-ip>:5000 --token ${token}"
     ;;
 
   list)
