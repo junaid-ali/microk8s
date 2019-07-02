@@ -80,14 +80,14 @@ apps:
 parts:
   libnftnl:
     plugin: autotools
-    source: http://www.es.netfilter.org/projects/libnftnl/files/libnftnl-1.0.9.tar.bz2
+    source: https://www.netfilter.org/projects/libnftnl/files/libnftnl-1.0.9.tar.bz2
     build-packages:
     - libjansson-dev
     - libmnl-dev
   iptables:
     after:
     - libnftnl
-    source: http://www.es.netfilter.org/projects/iptables/files/iptables-1.6.1.tar.bz2
+    source: https://www.netfilter.org/projects/iptables/files/iptables-1.6.1.tar.bz2
     plugin: autotools
     build-packages:
     - bison

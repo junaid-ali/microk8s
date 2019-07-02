@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 import getopt
+import subprocess
+
 import requests
 import urllib3
 import os
@@ -8,6 +10,7 @@ import sys
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CLUSTER_API = "cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
+snap_path = os.environ.get('SNAP')
 callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
 
 
@@ -16,12 +19,17 @@ def do_op(op_str):
         for _, line in enumerate(fp):
             parts = line.split()
             host = parts[0]
-            token = parts[1]
-            res = requests.post("https://{}:5000/{}/configure".format(host, CLUSTER_API),
-                                {"callback": token, "configuration": op_str},
-                                verify=False)
-            if res.status_code != 200:
-                print("Failed to do {} on {}".format(op_str, host))
+            try:
+                # Make sure this node exists
+                subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, host).split())
+                token = parts[1]
+                res = requests.post("https://{}:5000/{}/configure".format(host, CLUSTER_API),
+                                    {"callback": token, "configuration": op_str},
+                                    verify=False)
+                if res.status_code != 200:
+                    print("Failed to do {} on {}".format(op_str, host))
+            except subprocess.CalledProcessError:
+                print("Node {} not present".format(host))
 
 
 def restart(service):

@@ -34,7 +34,7 @@ done
 
 skip_opt_in_config "cluster-domain" kubelet
 skip_opt_in_config "cluster-dns" kubelet
-restart service kubelet
+restart_service kubelet
 kubelet=$(wait_for_service kubelet)
 if [[ $kubelet == fail ]]
 then

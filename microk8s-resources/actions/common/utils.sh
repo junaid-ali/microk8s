@@ -28,7 +28,7 @@ refresh_opt_in_config() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo SNAP_DATA="$SNAP_DATA" "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" update_argument "$3" "$opt" "$value"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" update_argument "$3" "$opt" "$value"
         fi
     fi
 }
@@ -47,7 +47,7 @@ skip_opt_in_config() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo SNAP_DATA="$SNAP_DATA" "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" remove_argument "$2" "$opt"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" remove_argument "$2" "$opt"
         fi
     fi
 }
@@ -63,7 +63,7 @@ restart_service() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo SNAP_DATA="$SNAP_DATA" "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" restart "$1"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" restart "$1"
         fi
     fi
 }
