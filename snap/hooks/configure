@@ -144,3 +144,65 @@ then
   mv "$SNAP_DATA/tmp/istio/istio-${ISTIO_ERSION}/install/kubernetes/istio-demo.yaml" "$SNAP_DATA/actions/istio/"
   sudo rm -rf "$SNAP_DATA/tmp/istio"
 fi
+
+# Switch to etcd available on ports meaning clustering support
+if grep -e "etcd.socket:2379" ${SNAP_DATA}/args/etcd
+then
+  rm ${SNAP_DATA}/args/cni-network/cni.conf
+
+  echo "Using a port for etcd"
+  # TODO: Do something smart in selecting a port
+  refresh_opt_in_config advertise-client-urls https://\${DEFAULT_INTERFACE_IP_ADDR}:12379 etcd
+  refresh_opt_in_config listen-client-urls https://0.0.0.0:12379 etcd
+  refresh_opt_in_config client-cert-auth true etcd
+  refresh_opt_in_config trusted-ca-file \${SNAP_DATA}/certs/ca.crt etcd
+  refresh_opt_in_config cert-file \${SNAP_DATA}/certs/server.crt etcd
+  refresh_opt_in_config key-file \${SNAP_DATA}/certs/server.key etcd
+  systemctl restart snap.${SNAP_NAME}.daemon-etcd
+
+  cp -r ${SNAP}/default-args/cni-network/flannel.conflist ${SNAP_DATA}/args/cni-network/
+  cp ${SNAP}/default-args/flanneld ${SNAP_DATA}/args/
+  systemctl restart snap.${SNAP_NAME}.daemon-flanneld
+
+  refresh_opt_in_config token-auth-file \${SNAP_DATA}/credentials/known_tokens.csv kube-apiserver
+  refresh_opt_in_config etcd-servers https://127.0.0.1:12379 kube-apiserver
+  refresh_opt_in_config etcd-cafile \${SNAP_DATA}/certs/ca.crt kube-apiserver
+  refresh_opt_in_config etcd-certfile \${SNAP_DATA}/certs/server.crt kube-apiserver
+  refresh_opt_in_config etcd-keyfile \${SNAP_DATA}/certs/server.key kube-apiserver
+  systemctl restart snap.${SNAP_NAME}.daemon-apiserver
+
+  # Create the known tokens
+  ca_data=$(cat ${SNAP_DATA}/certs/ca.crt | ${SNAP}/usr/bin/base64 -w 0)
+  proxy_token=$(openssl rand -base64 32 | ${SNAP}/usr/bin/base64)
+  echo "${proxy_token},system:kube-proxy,kube-proxy" > ${SNAP_DATA}/credentials/known_tokens.csv
+  chmod 600 ${SNAP_DATA}/credentials/known_tokens.csv
+  # TODO create a function for this
+  token=$(openssl rand -base64 32 | ${SNAP}/usr/bin/base64)
+  hostname=$(hostname)
+  echo "${token},system:node:${hostname},kubelet,kubelet-0,\"system:nodes\"" >> ${SNAP_DATA}/credentials/known_tokens.csv
+
+  # Create the proxy and kubelet kubeconfig
+  cp ${SNAP}/kubelet.config.template ${SNAP_DATA}/credentials/kubelet.config
+  # This is not safe. Everyone with local access can see these credentials.
+  chmod 644 ${SNAP_DATA}/credentials/kubelet.config
+  $SNAP/bin/sed -i 's/NAME/kubelet/g' ${SNAP_DATA}/credentials/kubelet.config
+  $SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/kubelet.config
+  $SNAP/bin/sed -i 's/TOKEN/'"${token}"'/g' ${SNAP_DATA}/credentials/kubelet.config
+
+  cp ${SNAP}/kubelet.config.template ${SNAP_DATA}/credentials/kubeproxy.config
+  # This is not safe. Everyone with local access can see these credentials.
+  chmod 644 ${SNAP_DATA}/credentials/kubeproxy.config
+  $SNAP/bin/sed -i 's/NAME/kubeproxy/g' ${SNAP_DATA}/credentials/kubeproxy.config
+  $SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config
+  $SNAP/bin/sed -i 's/TOKEN/'"${proxy_token}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config
+
+  refresh_opt_in_config kubeconfig \${SNAP_DATA}/credentials/kubeproxy.config kube-proxy
+  systemctl restart snap.${SNAP_NAME}.daemon-proxy
+
+  refresh_opt_in_config kubeconfig \${SNAP_DATA}/credentials/kubelet.config kubelet
+  refresh_opt_in_config network-plugin cni kubelet
+  refresh_opt_in_config cni-conf-dir \${SNAP_DATA}/args/cni-network/ kubelet
+  skip_opt_in_config pod-cidr kubelet
+  skip_opt_in_config non-masquerade-cidr kubelet
+  systemctl restart snap.${SNAP_NAME}.daemon-kubelet
+fi

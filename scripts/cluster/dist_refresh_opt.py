@@ -19,9 +19,11 @@ def do_op(op_str):
         for _, line in enumerate(fp):
             parts = line.split()
             host = parts[0]
+            print("Applying to node {}.".format(host))
             try:
                 # Make sure this node exists
-                subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, host).split())
+                subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, host).split(),
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 token = parts[1]
                 res = requests.post("https://{}:5000/{}/configure".format(host, CLUSTER_API),
                                     {"callback": token, "configuration": op_str},
@@ -33,17 +35,20 @@ def do_op(op_str):
 
 
 def restart(service):
+    print("Restarting nodes.")
     restart_str = "{{\"service\": [{{\"name\": \"{}\", \"restart\": \"yes\"}}]}}".format(service)
     do_op(restart_str)
 
 
 def update_argument(service, key, value):
+    print("Adding argument {} to nodes.".format(key))
     op_str = "{{\"service\": [{{\"name\":\"{}\", \"arguments_update\": [{{\"{}\": \"{}\"}}] }}]}}".format(service, key,
                                                                                                           value)
     do_op(op_str)
 
 
 def remove_argument(service, key):
+    print("Removing argument {} from nodes.".format(key))
     op_str = "{{\"service\": [{{\"name\":\"{}\", \"arguments_remove\": [\"{}\"] }}]}}".format(service, key)
     do_op(op_str)
 

@@ -13,7 +13,7 @@
 --secure-port=16443
 --insecure-port=8080
 --token-auth-file=${SNAP_DATA}/credentials/known_tokens.csv
---etcd-servers='https://127.0.0.1:2379'
+--etcd-servers='https://127.0.0.1:12379'
 --etcd-cafile=${SNAP_DATA}/certs/ca.crt
 --etcd-certfile=${SNAP_DATA}/certs/server.crt
 --etcd-keyfile=${SNAP_DATA}/certs/server.key
