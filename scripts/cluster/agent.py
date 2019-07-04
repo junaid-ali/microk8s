@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import socket
 import string
 import random
 import subprocess
@@ -158,10 +159,14 @@ def is_valid(token, token_type=cluster_tokens_file):
     return False
 
 
-def read_kubelet_args_file():
+def read_kubelet_args_file(hostname, remote_address):
     filename = "{}/args/kubelet".format(snapdata_path)
     with open(filename) as fp:
         args = fp.read()
+        try:
+            socket.gethostbyname(hostname)
+        except socket.gaierror:
+            args = "{}--hostname-override {}".format(args, remote_address)
         return args
 
 
@@ -186,7 +191,7 @@ def join_node():
     proxy_token = get_token('kube-proxy')
     kubelet_token = add_kubelet_token(hostname)
     subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
-    kubelet_args = read_kubelet_args_file()
+    kubelet_args = read_kubelet_args_file(hostname, request.remote_addr)
 
     return jsonify(ca=ca,
                    etcd=etcd_ep,
