@@ -38,7 +38,13 @@ case $1 in
   generate)
     token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
     echo ${token} | tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
-    echo "Join node with: microk8s.join <master-ip>:5000 --token ${token}"
+
+    port="25000"
+    if grep -e port "${SNAP_DATA}"/args/cluster-agent &> /dev/null
+    then
+      port=$(cat "${SNAP_DATA}"/args/cluster-agent | "$SNAP"/usr/bin/gawk '{print $2}')
+    fi
+    echo "Join node with: microk8s.join <master-ip>:$port --token ${token}"
     ;;
 
   list)

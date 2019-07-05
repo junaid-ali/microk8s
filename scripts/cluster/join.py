@@ -32,9 +32,18 @@ def get_connection_info(master_ip, master_port, token, callback_token):
     :param callback_token: the token to provide to the master for callbacks
     :return: the json response of the master
     """
+    cluster_agent_port = 25000
+    filename = "{}/args/cluster-agent".format(snapdata_path)
+    with open(filename) as fp:
+        for _, line in enumerate(fp):
+            if line.startswith("--port"):
+                cluster_agent_port = line.split(' ')
+                cluster_agent_port = cluster_agent_port[-1].split('=')
+                cluster_agent_port = cluster_agent_port[0].rstrip()
+
     connection_info = requests.post("https://{}:{}/{}/join".format(master_ip, master_port, CLUSTER_API),
                                     {"token": token, "hostname": socket.gethostname(),
-                                     "callback": callback_token},
+                                     "port": cluster_agent_port, "callback": callback_token},
                                     verify=False)
     if connection_info.status_code != 200:
         print("Failed to join cluster. {}".format(connection_info.content.decode('utf-8')))

@@ -22,18 +22,19 @@ def do_op(op_str):
     with open(callback_tokens_file, "r+") as fp:
         for _, line in enumerate(fp):
             parts = line.split()
-            host = parts[0]
+            node_ep = parts[0]
+            host = node_ep.split(":")[0]
             print("Applying to node {}.".format(host))
             try:
                 # Make sure this node exists
                 subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, host).split(),
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 token = parts[1]
-                res = requests.post("https://{}:5000/{}/configure".format(host, CLUSTER_API),
+                res = requests.post("https://{}/{}/configure".format(node_ep, CLUSTER_API),
                                     {"callback": token, "configuration": op_str},
                                     verify=False)
                 if res.status_code != 200:
-                    print("Failed to do {} on {}".format(op_str, host))
+                    print("Failed to do {} on {}".format(op_str, node_ep))
             except subprocess.CalledProcessError:
                 print("Node {} not present".format(host))
 

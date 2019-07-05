@@ -31,7 +31,7 @@ apps:
     command: apiservice-kicker
     daemon: simple
   daemon-cluster-agent:
-    command: cluster-agent
+    command: run-cluster-agent-with-args
     daemon: simple
   daemon-controller-manager:
     command: run-with-config-args kube-controller-manager

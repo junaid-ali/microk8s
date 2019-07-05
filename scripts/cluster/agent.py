@@ -1,4 +1,5 @@
 #!flask/bin/python
+import getopt
 import json
 import os
 import shutil
@@ -6,6 +7,7 @@ import socket
 import string
 import random
 import subprocess
+import sys
 
 from flask import Flask, jsonify, request, abort, Response
 
@@ -16,6 +18,8 @@ cluster_tokens_file = "{}/credentials/cluster-tokens.txt".format(snapdata_path)
 callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
 callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
 certs_request_tokens_file = "{}/credentials/certs-request-tokens.txt".format(snapdata_path)
+default_port = 25000
+default_listen_interface = "0.0.0.0"
 
 
 def get_service_name(service):
@@ -65,7 +69,7 @@ def store_callback_token(node, callback_token):
     :param node: the node
     :param callback_token: the token
     """
-    tmp_file = "{}/{}.tmp".format(snapdata_path, callback_tokens_file)
+    tmp_file = "{}.tmp".format(callback_tokens_file)
     if not os.path.isfile(callback_tokens_file):
         open(callback_tokens_file, 'a+')
         os.chmod(callback_tokens_file, 0o600)
@@ -225,7 +229,7 @@ def read_kubelet_args_file(node=None):
     with open(filename) as fp:
         args = fp.read()
         if node:
-            args = "{}--hostname-override {}".format(node)
+            args = "{}--hostname-override {}".format(args, node)
         return args
 
 
@@ -251,6 +255,7 @@ def join_node():
     """
     token = request.form['token']
     hostname = request.form['hostname']
+    port = request.form['port']
     callback_token = request.form['callback']
 
     if not is_valid(token):
@@ -259,7 +264,8 @@ def join_node():
     add_token_to_certs_request(token)
     remove_token_from_file(token, cluster_tokens_file)
 
-    node_ep = get_node_ep(hostname, request.remote_addr)
+    node_addr = get_node_ep(hostname, request.remote_addr)
+    node_ep = "{}:{}".format(node_addr, port)
     store_callback_token(node_ep, callback_token)
 
     ca = getCA()
@@ -268,8 +274,8 @@ def join_node():
     proxy_token = get_token('kube-proxy')
     kubelet_token = add_kubelet_token(hostname)
     subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
-    if node_ep != hostname:
-        kubelet_args = read_kubelet_args_file(node_ep)
+    if node_addr != hostname:
+        kubelet_args = read_kubelet_args_file(node_addr)
     else:
         kubelet_args = read_kubelet_args_file()
 
@@ -355,7 +361,32 @@ def configure():
     return "ok"
 
 
+def usage():
+    print("Agent responsible for setting up a cluster. Arguments:")
+    print("-l, --listen:   interfaces to listen to (defaults to {})".format(default_listen_interface))
+    print("-p, --port:     port to listen to (default {})".format(default_port))
+
+
 if __name__ == '__main__':
     server_cert = "{SNAP_DATA}/certs/server.crt".format(SNAP_DATA=snapdata_path)
     server_key = "{SNAP_DATA}/certs/server.key".format(SNAP_DATA=snapdata_path)
-    app.run(host="0.0.0.0", port=5000, ssl_context=(server_cert, server_key))
+    try:
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "hl:p:", ["help", "listen=", "port="])
+    except getopt.GetoptError as err:
+        print(err)  # will print something like "option -a not recognized"
+        usage()
+        sys.exit(2)
+    port = default_port
+    listen = default_listen_interface
+    for o, a in opts:
+        if o in ("-l", "--listen"):
+            listen = a
+        if o in ("-p", "--port"):
+            port = a
+        elif o in ("-h", "--help"):
+            usage()
+            sys.exit(1)
+        else:
+            assert False, "unhandled option"
+
+    app.run(host=listen, port=port, ssl_context=(server_cert, server_key))
