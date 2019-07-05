@@ -23,6 +23,15 @@ server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
 
 
 def get_connection_info(master_ip, master_port, token, callback_token):
+    """
+    Contact the master and get all connection information
+
+    :param master_ip: the master IP
+    :param master_port: the master port
+    :param token: the token to contact the master with
+    :param callback_token: the token to provide to the master for callbacks
+    :return: the json response of the master
+    """
     connection_info = requests.post("https://{}:{}/{}/join".format(master_ip, master_port, CLUSTER_API),
                                     {"token": token, "hostname": socket.gethostname(),
                                      "callback": callback_token},
@@ -34,18 +43,25 @@ def get_connection_info(master_ip, master_port, token, callback_token):
 
 
 def usage():
-    print("Join a cluster:             microk8s.join <master>:<port> --token=<token>")
+    print("Join a cluster: microk8s.join <master>:<port> --token=<token>")
 
 
-def set_arg(arg, value, file):
+def set_arg(key, value, file):
+    """
+    Set an arguement to a file
+
+    :param key: argument name
+    :param value: value
+    :param file: the arguments file
+    """
     filename = "{}/args/{}".format(snapdata_path, file)
     filename_remote = "{}/args/{}.remote".format(snapdata_path, file)
     with open(filename_remote, 'w+') as back_fp:
         with open(filename, 'r+') as fp:
             for _, line in enumerate(fp):
-                if line.startswith(arg):
+                if line.startswith(key):
                     if value is not None:
-                        back_fp.write("{} {}\n".format(arg, value))
+                        back_fp.write("{} {}\n".format(key, value))
                 else:
                     back_fp.write("{}".format(line))
     shutil.copyfile(filename, "{}.backup".format(filename))
@@ -53,7 +69,38 @@ def set_arg(arg, value, file):
     os.remove(filename_remote)
 
 
+def get_etcd_client_cert(master_ip, master_port, token):
+    """
+    Get a signed cert to access etcd
+
+    :param master_ip: master ip
+    :param master_port: master port
+    :param token: token to contact the master with
+    """
+    cer_req_file = "{}/certs/server.remote.csr".format(snapdata_path)
+    cmd_cert = "openssl req -new -key {SNAP_DATA}/certs/server.key -out {csr} " \
+               "-config {SNAP_DATA}/certs/csr.conf".format(SNAP_DATA=snapdata_path, csr=cer_req_file)
+    subprocess.check_call(cmd_cert.split())
+    with open(cer_req_file) as fp:
+        csr = fp.read()
+        signed = requests.post("https://{}:{}/{}/sign-cert".format(master_ip, master_port, CLUSTER_API),
+                               {'token': token, 'request': csr},
+                               verify=False)
+        info_json = signed.content.decode('utf-8')
+        info = json.loads(info_json)
+        with open(server_cert_file, "w") as cert_fp:
+            cert_fp.write(info["certificate"])
+
+
 def update_flannel(etcd, master_ip, master_port, token):
+    """
+    Configure flannel
+
+    :param etcd: etcd endpoint
+    :param master_ip: master ip
+    :param master_port: master port
+    :param token: token to contact the master with
+    """
     get_etcd_client_cert(master_ip, master_port, token)
     etcd = etcd.replace("0.0.0.0", master_ip)
     set_arg("--etcd-endpoints", etcd, "flanneld")
@@ -65,10 +112,24 @@ def update_flannel(etcd, master_ip, master_port, token):
 
 
 def ca_one_line(ca):
+    """
+    The CA in one line
+    :param ca: the ca
+    :return: one line
+    """
     return base64.b64encode(ca.encode('utf-8')).decode('utf-8')
 
 
 def create_kubeconfig(token, ca, master_ip, api_port, user):
+    """
+    Create a kubeconfig file. The file in stored under credentials named after the user
+
+    :param token: the token to be in the kubeconfig
+    :param ca: the ca
+    :param master_ip: the master node IP
+    :param api_port: the API server port
+    :param user: the user to use al login
+    """
     snap_path = os.environ.get('SNAP')
     config_template = "{}/{}".format(snap_path, "kubelet.config.template")
     config = "{}/credentials/{}.config".format(snapdata_path, user)
@@ -86,39 +147,47 @@ def create_kubeconfig(token, ca, master_ip, api_port, user):
 
 
 def update_kubeproxy(token, ca, master_ip, api_port):
+    """
+    Configure the kube-proxy
+
+    :param token: the token to be in the kubeconfig
+    :param ca: the ca
+    :param master_ip: the master node IP
+    :param api_port: the API server port
+    """
     create_kubeconfig(token, ca, master_ip, api_port, "kubeproxy")
     set_arg("--master", None, "kube-proxy")
     subprocess.check_call("systemctl restart snap.microk8s.daemon-proxy.service".split())
 
 
 def update_kubelet(token, ca, master_ip, api_port):
+    """
+    Configure the kubelet
+
+    :param token: the token to be in the kubeconfig
+    :param ca: the ca
+    :param master_ip: the master node IP
+    :param api_port: the API server port
+    """
     create_kubeconfig(token, ca, master_ip, api_port, "kubelet")
     set_arg("--client-ca-file", "${SNAP_DATA}/certs/ca.remote.crt", "kubelet")
     subprocess.check_call("systemctl restart snap.microk8s.daemon-kubelet.service".split())
 
 
 def store_remote_ca(ca):
+    """
+    Store the remote ca
+
+    :param ca: the CA
+    """
     with open(ca_cert_file, 'w+') as fp:
         fp.write(ca)
 
 
-def get_etcd_client_cert(master_ip, master_port, token):
-    cer_req_file = "{}/certs/server.remote.csr".format(snapdata_path)
-    cmd_cert = "openssl req -new -key {SNAP_DATA}/certs/server.key -out {csr} " \
-               "-config {SNAP_DATA}/certs/csr.conf".format(SNAP_DATA=snapdata_path, csr=cer_req_file)
-    subprocess.check_call(cmd_cert.split())
-    with open(cer_req_file) as fp:
-        csr = fp.read()
-        signed = requests.post("https://{}:{}/{}/sign-cert".format(master_ip, master_port, CLUSTER_API),
-                               {'token': token, 'request': csr},
-                               verify=False)
-        info_json = signed.content.decode('utf-8')
-        info = json.loads(info_json)
-        with open(server_cert_file, "w") as cert_fp:
-            cert_fp.write(info["certificate"])
-
-
 def mark_cluster_node():
+    """
+    Mark a node as being part of a cluster by creating a var/lock/clustered.lock
+    """
     lock_file = "{}/var/lock/clustered.lock".format(snapdata_path)
     open(lock_file, 'a').close()
     os.chmod(lock_file, 0o700)
@@ -128,6 +197,11 @@ def mark_cluster_node():
 
 
 def generate_callback_token():
+    """
+    Generate a token and store it in the callback token file
+
+    :return: the token
+    """
     token = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(64))
     with open(callback_token_file, "w") as fp:
         fp.write("{}\n".format(token))
@@ -136,12 +210,20 @@ def generate_callback_token():
 
 
 def store_base_kubelet_args(args_string):
+    """
+    Create a kubelet args file from the set of args provided
+
+    :param args_string: the arguments provided
+    """
     args_file = "{}/args/kubelet".format(snapdata_path)
     with open(args_file, "w") as fp:
         fp.write(args_string)
 
 
 def reset_node():
+    """
+    Take a node out of a cluster
+    """
     lock_file = "{}/var/lock/clustered.lock".format(snapdata_path)
     os.remove(lock_file)
     os.remove(ca_cert_file)
@@ -160,7 +242,7 @@ def reset_node():
     subprocess.check_call("{}/microk8s-start.wrapper".format(snap_path).split())
 
 
-def main():
+if __name__ == "__main__":
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "ht:", ["help", "token="])
     except getopt.GetoptError as err:
@@ -173,7 +255,7 @@ def main():
             token = a
         elif o in ("-h", "--help"):
             usage()
-            sys.exit()
+            sys.exit(1)
         else:
             assert False, "unhandled option"
 
@@ -183,12 +265,12 @@ def main():
         if token is None:
             print("Please provide a token.")
             usage()
-            sys.exit()
+            sys.exit(3)
 
         if len(args) <= 0:
             print("Please provide a master endpoint and a token.")
             usage()
-            sys.exit()
+            sys.exit(4)
 
         master_ep = args[0].split(":")
         master_ip = master_ep[0]
@@ -202,7 +284,4 @@ def main():
         update_kubeproxy(info["kubeproxy"], info["ca"], master_ip, info["apiport"])
         update_kubelet(info["kubelet"], info["ca"], master_ip, info["apiport"])
         mark_cluster_node()
-
-
-if __name__ == "__main__":
-    main()
+    sys.exit(0)

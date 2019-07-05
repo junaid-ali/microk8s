@@ -19,15 +19,29 @@ certs_request_tokens_file = "{}/credentials/certs-request-tokens.txt".format(sna
 
 
 def get_service_name(service):
+    """
+    Returns the service name from its configuration file name.
+
+    :param service: the name of the service configuration file
+    :return: the service name
+    """
     if service in ["kube-proxy", "kube-apiserver", "kube-scheduler", "kube-controller-manager"]:
-        return service[len("kube-"),:]
+        return service[len("kube-"), :]
     else:
         return service
 
 
 def update_service_argument(service, key, val):
-    args_file = "{}/args/{}".format(snapdata_path, get_service_name(service))
-    args_file_tmp = "{}/args/{}.tmp".format(snapdata_path, get_service_name(service))
+    """
+    Adds an argument to the arguments file of the service.
+
+    :param service: the service
+    :param key: the arguments to add
+    :param val: the value for the argument
+    """
+
+    args_file = "{}/args/{}".format(snapdata_path, service)
+    args_file_tmp = "{}/args/{}.tmp".format(snapdata_path, service)
     found = False
     with open(args_file_tmp, "w+") as bfp:
         with open(args_file, "r+") as fp:
@@ -44,28 +58,40 @@ def update_service_argument(service, key, val):
     shutil.move(args_file_tmp, args_file)
 
 
-def store_callback_token(hostname, callback_token):
-    tmpfile = "{}.tmp".format(callback_tokens_file)
+def store_callback_token(node, callback_token):
+    """
+    Store a callback token
+
+    :param node: the node
+    :param callback_token: the token
+    """
+    tmp_file = "{}/{}.tmp".format(snapdata_path, callback_tokens_file)
     if not os.path.isfile(callback_tokens_file):
         open(callback_tokens_file, 'a+')
         os.chmod(callback_tokens_file, 0o600)
-    with open(tmpfile, "w") as backup_fp:
-        os.chmod(tmpfile, 0o600)
+    with open(tmp_file, "w") as backup_fp:
+        os.chmod(tmp_file, 0o600)
         found = False
         with open(callback_tokens_file, 'r+') as callback_fp:
             for _, line in enumerate(callback_fp):
-                if line.startswith(hostname):
-                    backup_fp.write("{} {}\n".format(hostname, callback_token))
+                if line.startswith(node):
+                    backup_fp.write("{} {}\n".format(node, callback_token))
                     found = True
                 else:
                     backup_fp.write(line)
         if not found:
-            backup_fp.write("{} {}\n".format(hostname, callback_token))
+            backup_fp.write("{} {}\n".format(node, callback_token))
 
-    shutil.move(tmpfile, callback_tokens_file)
+    shutil.move(tmp_file, callback_tokens_file)
 
 
 def sign_client_cert(cert_request, token):
+    """
+    Sign a certificate request
+    :param cert_request: the request
+    :param token: a token acttin as a request uuid
+    :return: the certificate
+    """
     req_file = "{}/certs/request.{}.csr".format(snapdata_path, token)
     sign_cmd = "openssl x509 -req -in {csr} -CA {SNAP_DATA}/certs/ca.crt -CAkey" \
                " {SNAP_DATA}/certs/ca.key -CAcreateserial -out {SNAP_DATA}/certs/server.{token}.crt" \
@@ -80,11 +106,20 @@ def sign_client_cert(cert_request, token):
 
 
 def add_token_to_certs_request(token):
+    """
+    Add a token to the file holding the nodes we expect a certificate request from.
+    :param token: the token
+    """
     with open(certs_request_tokens_file, "a+") as fp:
         fp.write("{}\n".format(token))
 
 
 def remove_token_from_file(token, file):
+    """
+    Remove a token from the valid tokens set
+    :param token: the token to be removed
+    :param file: the file to be removed from
+    """
     backup_file = "{}.backup".format(file)
     # That is a critical section. We need to protect it.
     # We are safe sor now because flask serves one request at a time.
@@ -98,11 +133,13 @@ def remove_token_from_file(token, file):
     shutil.copyfile(backup_file, file)
 
 
-def remove_token_from_cluster(token):
-    remove_token_from_file(token, cluster_tokens_file)
-
-
 def get_token(name):
+    """
+    Get token from known_tokens file
+
+    :param name: the name of the node
+    :return: the token or None
+    """
     file = "{}/credentials/known_tokens.csv".format(snapdata_path)
     with open(file) as fp:
         line = fp.readline()
@@ -113,6 +150,12 @@ def get_token(name):
 
 
 def add_kubelet_token(hostname):
+    """
+    Add a token for a node in the known tokens
+
+    :param hostname: the name of the node
+    :return: the token added
+    """
     file = "{}/credentials/known_tokens.csv".format(snapdata_path)
     old_token = get_token("system:node:{}".format(hostname))
     if old_token:
@@ -129,22 +172,28 @@ def add_kubelet_token(hostname):
 
 
 def getCA():
-    # TODO get the CA path properly
+    """
+    Return the CA
+    :return: the CA file contents
+    """
     ca_file = "{}/certs/ca.crt".format(snapdata_path)
     with open(ca_file) as fp:
         ca = fp.read()
     return ca
 
 
-def get_arg(arg, file):
-    print("Get argument {} from {}".format(arg, file))
+def get_arg(key, file):
+    """
+    Get an argument froman arguments file
+
+    :param key: the argument we look for
+    :param file: the arguments file to search in
+    :return: the value of the argument
+    """
     filename = "{}/args/{}".format(snapdata_path, file)
-    print("Opening file {}".format(filename))
     with open(filename) as fp:
         for _, line in enumerate(fp):
-            print("{} starts with {}".format(line, arg))
-            if line.startswith(arg):
-                print("Yes")
+            if line.startswith(key):
                 args = line.split(' ')
                 args = args[-1].split('=')
                 return args[-1].rstrip()
@@ -152,6 +201,13 @@ def get_arg(arg, file):
 
 
 def is_valid(token, token_type=cluster_tokens_file):
+    """
+    Check token
+
+    :param token: token to be checked
+    :param token_type: the type of token (bootstrap or signature)
+    :return: True for a valid token, false otherwise
+    """
     with open(token_type) as fp:
         for _, line in enumerate(fp):
             if line.startswith(token):
@@ -159,20 +215,40 @@ def is_valid(token, token_type=cluster_tokens_file):
     return False
 
 
-def read_kubelet_args_file(hostname, remote_address):
+def read_kubelet_args_file(node=None):
+    """
+    Return the contents of the kubelet arguments file
+    :param node: should we add a host override?
+    :return: the kubelet args file
+    """
     filename = "{}/args/kubelet".format(snapdata_path)
     with open(filename) as fp:
         args = fp.read()
-        try:
-            socket.gethostbyname(hostname)
-        except socket.gaierror:
-            args = "{}--hostname-override {}".format(args, remote_address)
+        if node:
+            args = "{}--hostname-override {}".format(node)
         return args
+
+
+def get_node_ep(hostname, remote_addr):
+    """
+    Return the endpoint to be used for the node based by trying to resolve the hostname provided
+    :param hostname: the provided hostname
+    :param remote_addr: the address the request came from
+    :return: the node's location
+    """
+    try:
+        socket.gethostbyname(hostname)
+        return hostname
+    except socket.gaierror:
+        return remote_addr
+    return remote_addr
 
 
 @app.route('/{}/join'.format(CLUSTER_API), methods=['POST'])
 def join_node():
-
+    """
+    Web call to join an node to the cluster
+    """
     token = request.form['token']
     hostname = request.form['hostname']
     callback_token = request.form['callback']
@@ -181,9 +257,10 @@ def join_node():
         return Response("Invalid token provided.", mimetype='text/html', status=500)
 
     add_token_to_certs_request(token)
-    remove_token_from_cluster(token)
+    remove_token_from_file(token, cluster_tokens_file)
 
-    store_callback_token(hostname, callback_token)
+    node_ep = get_node_ep(hostname, request.remote_addr)
+    store_callback_token(node_ep, callback_token)
 
     ca = getCA()
     etcd_ep = get_arg('--listen-client-urls', 'etcd')
@@ -191,7 +268,10 @@ def join_node():
     proxy_token = get_token('kube-proxy')
     kubelet_token = add_kubelet_token(hostname)
     subprocess.check_call("systemctl restart snap.microk8s.daemon-apiserver.service".split())
-    kubelet_args = read_kubelet_args_file(hostname, request.remote_addr)
+    if node_ep != hostname:
+        kubelet_args = read_kubelet_args_file(node_ep)
+    else:
+        kubelet_args = read_kubelet_args_file()
 
     return jsonify(ca=ca,
                    etcd=etcd_ep,
@@ -203,7 +283,9 @@ def join_node():
 
 @app.route('/{}/sign-cert'.format(CLUSTER_API), methods=['POST'])
 def sign_cert():
-
+    """
+    Web call to sign a certificate
+    """
     token = request.form['token']
     cert_request = request.form['request']
 
@@ -217,7 +299,9 @@ def sign_cert():
 
 @app.route('/{}/configure'.format(CLUSTER_API), methods=['POST'])
 def configure():
-
+    """
+    Web call to configure the node
+    """
     callback_token = request.form['callback']
     if not is_valid(callback_token, callback_token_file):
         return Response("Invalid token provided.", mimetype='text/html', status=500)
