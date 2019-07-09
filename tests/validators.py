@@ -182,6 +182,7 @@ def validate_istio():
     wait_for_pod_state("", "default", "running", label="app=details")
     kubectl("delete -f {}".format(manifest))
 
+
 def validate_knative():
     """
     Validate Knative by deploying the helloworld-go app.
@@ -204,6 +205,7 @@ def validate_knative():
     kubectl("apply -f {}".format(manifest))
     wait_for_pod_state("", "default", "running", label="serving.knative.dev/service=helloworld-go")
     kubectl("delete -f {}".format(manifest))
+
 
 def validate_registry():
     """
@@ -265,6 +267,7 @@ def validate_metrics_server():
 
     assert attempt > 0
 
+
 def validate_prometheus():
     """
     Validate the prometheus operator
@@ -289,6 +292,7 @@ def validate_fluentd():
     wait_for_pod_state("", "kube-system", "running", label="k8s-app=fluentd-es")
     wait_for_pod_state("", "kube-system", "running", label="k8s-app=kibana-logging")
 
+
 def validate_jaeger():
     """
     Validate the jaeger operator
@@ -311,6 +315,7 @@ def validate_jaeger():
 
     assert attempt > 0
 
+
 def validate_linkerd():
     """
     Validate Linkerd by deploying emojivoto.
@@ -329,6 +334,7 @@ def validate_linkerd():
     wait_for_pod_state("", "emojivoto", "running", label="app=emoji-svc")
     kubectl("delete -f {}".format(manifest))
 
+
 def validate_rbac():
     """
     Validate RBAC is actually on
@@ -337,3 +343,10 @@ def validate_rbac():
     assert "no" in output
     output = kubectl("auth can-i --as=admin --as-group=system:masters view pod")
     assert "yes" in output
+
+
+def validate_cluster():
+    """
+    Validate cluster
+    """
+    wait_for_installation(cluster_nodes=2)
