@@ -14,6 +14,7 @@ from flask import Flask, jsonify, request, abort, Response
 app = Flask(__name__)
 CLUSTER_API="cluster/api/v1.0"
 snapdata_path = os.environ.get('SNAP_DATA')
+snap_path = os.environ.get('SNAP_DATA')
 cluster_tokens_file = "{}/credentials/cluster-tokens.txt".format(snapdata_path)
 callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
 callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
@@ -336,6 +337,17 @@ def configure():
           "name": "kube-proxy",
           "restart": true
         }
+      ],
+      "addon":
+      [
+        {
+          "name": "gpu",
+          "enable": true
+        },
+        {
+          "name": "gpu",
+          "disable": true
+        }
       ]
     }
     '''
@@ -357,6 +369,15 @@ def configure():
             service_name = get_service_name(service["name"])
             print("restarting {}".format(service["name"]))
             subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service_name).split())
+
+    for addon in configuration["addon"]:
+        print("{}".format(addon["name"]))
+        if "enable" in addon and addon["enable"]:
+            print("Enabling {}".format(addon["name"]))
+            subprocess.check_call("{}/microk8s-enable.wrapper {}".format(snap_path, addon["name"]).split())
+        if "disable" in addon and addon["disable"]:
+            print("Disabling {}".format(addon["name"]))
+            subprocess.check_call("{}/microk8s-disable.wrapper {}".format(snap_path, addon["name"]).split())
 
     return "ok"
 
