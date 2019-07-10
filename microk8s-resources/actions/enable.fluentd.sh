@@ -10,8 +10,10 @@ echo "Enabling Fluentd-Elasticsearch"
 
 echo "Labeling nodes"
 NODENAME="$("$SNAP/kubectl" "--kubeconfig=$SNAP/client.config" get no -o yaml | grep " name:"| awk '{print $2}')"
-"$SNAP/kubectl" "--kubeconfig=$SNAP/client.config" label nodes "$NODENAME" beta.kubernetes.io/fluentd-ds-ready=true || true
-
+for NODE in $NODENAME
+do
+  "$SNAP/kubectl" "--kubeconfig=$SNAP/client.config" label nodes "$NODENAME" beta.kubernetes.io/fluentd-ds-ready=true || true
+done
 
 "$SNAP/microk8s-enable.wrapper" dns
 sleep 5
