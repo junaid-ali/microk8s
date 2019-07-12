@@ -57,3 +57,8 @@ chmod 644 ${SNAP_DATA}/credentials/kubeproxy.config
 $SNAP/bin/sed -i 's/NAME/kubeproxy/g' ${SNAP_DATA}/credentials/kubeproxy.config
 $SNAP/bin/sed -i 's/CADATA/'"${ca_data}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config
 $SNAP/bin/sed -i 's/TOKEN/'"${proxy_token}"'/g' ${SNAP_DATA}/credentials/kubeproxy.config
+
+if $SNAP/sbin/ip link show cni0
+then
+  $SNAP/sbin/ip link delete cni0
+fi

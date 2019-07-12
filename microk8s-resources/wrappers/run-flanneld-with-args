@@ -17,7 +17,7 @@ ca_file="$(eval echo $ca_file)"
 
 
 # TODO get this from a file
-data='{"Network": "10.1.2.0/24", "Backend": {"Type": "vxlan"}}'
+data='{"Network": "10.1.0.0/16", "Backend": {"Type": "vxlan"}}'
 
 if ! "${SNAP}/etcdctl" --endpoint "${etcd_endpoints}" --cert-file "${cert_file}" --key-file "${key_file}" --ca-file "${ca_file}" rm "/coreos.com/network/config"; then
   echo "/coreos.com/network/config is not in etcd. Probably a first time run."
