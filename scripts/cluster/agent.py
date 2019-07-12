@@ -352,32 +352,34 @@ def configure():
     }
     '''
 
-    for service in configuration["service"]:
-        print("{}".format(service["name"]))
-        if "arguments_update" in service:
-            print("Updating arguments")
-            for argument in service["arguments_update"]:
-                for key, val in argument.items():
-                    print("{} is {}".format(key, val))
-                    update_service_argument(service["name"], key, val)
-        if "arguments_remove" in service:
-            print("Removing arguments")
-            for argument in service["arguments_remove"]:
-                print("{}".format(argument))
-                update_service_argument(service["name"], argument, None)
-        if "restart" in service and service["restart"]:
-            service_name = get_service_name(service["name"])
-            print("restarting {}".format(service["name"]))
-            subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service_name).split())
+    if "service" in configuration:
+        for service in configuration["service"]:
+            print("{}".format(service["name"]))
+            if "arguments_update" in service:
+                print("Updating arguments")
+                for argument in service["arguments_update"]:
+                    for key, val in argument.items():
+                        print("{} is {}".format(key, val))
+                        update_service_argument(service["name"], key, val)
+            if "arguments_remove" in service:
+                print("Removing arguments")
+                for argument in service["arguments_remove"]:
+                    print("{}".format(argument))
+                    update_service_argument(service["name"], argument, None)
+            if "restart" in service and service["restart"]:
+                service_name = get_service_name(service["name"])
+                print("restarting {}".format(service["name"]))
+                subprocess.check_call("systemctl restart snap.microk8s.daemon-{}.service".format(service_name).split())
 
-    for addon in configuration["addon"]:
-        print("{}".format(addon["name"]))
-        if "enable" in addon and addon["enable"]:
-            print("Enabling {}".format(addon["name"]))
-            subprocess.check_call("{}/microk8s-enable.wrapper {}".format(snap_path, addon["name"]).split())
-        if "disable" in addon and addon["disable"]:
-            print("Disabling {}".format(addon["name"]))
-            subprocess.check_call("{}/microk8s-disable.wrapper {}".format(snap_path, addon["name"]).split())
+    if "addon" in configuration:
+        for addon in configuration["addon"]:
+            print("{}".format(addon["name"]))
+            if "enable" in addon and addon["enable"]:
+                print("Enabling {}".format(addon["name"]))
+                subprocess.check_call("{}/microk8s-enable.wrapper {}".format(snap_path, addon["name"]).split())
+            if "disable" in addon and addon["disable"]:
+                print("Disabling {}".format(addon["name"]))
+                subprocess.check_call("{}/microk8s-disable.wrapper {}".format(snap_path, addon["name"]).split())
 
     return "ok"
 

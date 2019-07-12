@@ -75,9 +75,21 @@ def remove_argument(service, key):
     do_op(op_str)
 
 
+def set_addon(addon, state):
+    """
+    Enable or disable an add-on across all nodes
+
+    :param addon: the add-on name
+    :param state: 'enable' or 'disable'
+    """
+    print("Set add-on {} to {} on nodes.".format(addon, state))
+    op_str = "{{\"addon\": [{{\"name\":\"{}\", \"{}\": \"true\" }}]}}".format(addon, state)
+    do_op(op_str)
+
+
 def usage():
     print("usage: dist_refresh_opt [OPERATION] [SERVICE] (ARGUMENT) (value)")
-    print("OPERATION is one of restart, update_argument, remove_argument")
+    print("OPERATION is one of restart, update_argument, remove_argument, set_addon")
 
 
 if __name__ == "__main__":
@@ -107,4 +119,6 @@ if __name__ == "__main__":
         update_argument(service, args[2], args[3])
     if operation == "remove_argument":
         remove_argument(service, args[2])
+    if operation == "set_addon":
+        set_addon(service, args[2])
     exit(0)

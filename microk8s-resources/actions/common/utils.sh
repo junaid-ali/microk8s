@@ -28,7 +28,24 @@ refresh_opt_in_config() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" update_argument "$3" "$opt" "$value"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/distributed_op.py" update_argument "$3" "$opt" "$value"
+        fi
+    fi
+}
+
+
+nodes_addon() {
+    # Enable or disable a, addon across all nodes
+    # state should be either 'enable' or 'disable'
+    local addon="$1"
+    local state="$2"
+
+    if [ -e "${SNAP_DATA}/credentials/callback-tokens.txt" ]
+    then
+        tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
+        if [[ "$tokens" -ge "0" ]]
+        then
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/distributed_op.py" set_addon "$addon" "$state"
         fi
     fi
 }
@@ -47,7 +64,7 @@ skip_opt_in_config() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" remove_argument "$2" "$opt"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/distributed_op.py" remove_argument "$2" "$opt"
         fi
     fi
 }
@@ -63,7 +80,7 @@ restart_service() {
         tokens=$(sudo "$SNAP/bin/cat" "${SNAP_DATA}/credentials/callback-tokens.txt" | "$SNAP/usr/bin/wc" -l)
         if [[ "$tokens" -ge "0" ]]
         then
-            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/dist_refresh_opt.py" restart "$1"
+            sudo -E "$SNAP/usr/bin/python3" "$SNAP/scripts/cluster/distributed_op.py" restart "$1"
         fi
     fi
 }
