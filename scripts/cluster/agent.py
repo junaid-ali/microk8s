@@ -56,7 +56,7 @@ def update_service_argument(service, key, val):
                         bfp.write("{}={}\n".format(key, val))
                     found = True
                 else:
-                    bfp.write(line)
+                    bfp.write("{}\n".format(line.rstrip()))
         if not found and val is not None:
             bfp.write("{}={}\n".format(key, val))
 
