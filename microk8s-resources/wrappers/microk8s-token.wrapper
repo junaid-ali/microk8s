@@ -36,6 +36,14 @@ exit_if_stopped
 
 case $1 in
   generate)
+    subject=$(openssl x509 -noout -subject -in "$SNAP_DATA/certs/ca.crt")
+    if [[ $subject == *"127.0.0.1"* ]]; then
+      echo "Clustering requires a fresh MicroK8s installation. Reinstall with:"
+      echo "sudo snap remove microk8s"
+      echo "sudo snap install microk8s --classic"
+      exit 1
+    fi
+
     token=$(< /dev/urandom tr -dc A-Za-z | head -c32;echo;)
     echo ${token} | tee -a $SNAP_DATA/credentials/cluster-tokens.txt > /dev/null
 
