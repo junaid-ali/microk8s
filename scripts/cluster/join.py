@@ -19,6 +19,8 @@ snapdata_path = os.environ.get('SNAP_DATA')
 snap_path = os.environ.get('SNAP')
 ca_cert_file = "{}/certs/ca.remote.crt".format(snapdata_path)
 callback_token_file = "{}/credentials/callback-token.txt".format(snapdata_path)
+callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
+callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
 server_cert_file = "{}/certs/server.remote.crt".format(snapdata_path)
 
 
@@ -229,7 +231,7 @@ def store_base_kubelet_args(args_string):
         fp.write(args_string)
 
 
-def reset_node():
+def reset_current_installtion():
     """
     Take a node out of a cluster
     """
@@ -251,6 +253,63 @@ def reset_node():
     subprocess.check_call("{}/microk8s-start.wrapper".format(snap_path).split())
 
 
+def remove_kubelet_token(node):
+    """
+    Remove a token for a node in the known tokens
+
+    :param node: the name of the node
+    """
+    file = "{}/credentials/known_tokens.csv".format(snapdata_path)
+    backup_file = "{}.backup".format(file)
+    token = "system:node:{}".format(node)
+    # That is a critical section. We need to protect it.
+    with open(backup_file, 'w') as back_fp:
+        with open(file, 'r') as fp:
+            for _, line in enumerate(fp):
+                if token in line:
+                    continue
+                back_fp.write("{}".format(line))
+
+    shutil.copyfile(backup_file, file)
+
+
+def remove_callback_token(node):
+    """
+    Remove a callback token
+
+    :param node: the node
+    """
+    tmp_file = "{}.tmp".format(callback_tokens_file)
+    if not os.path.isfile(callback_tokens_file):
+        open(callback_tokens_file, 'a+')
+        os.chmod(callback_tokens_file, 0o600)
+    with open(tmp_file, "w") as backup_fp:
+        os.chmod(tmp_file, 0o600)
+        with open(callback_tokens_file, 'r+') as callback_fp:
+            for _, line in enumerate(callback_fp):
+                if line.startswith(node):
+                    continue
+                else:
+                    backup_fp.write(line)
+
+    shutil.move(tmp_file, callback_tokens_file)
+
+
+def remove_node(node):
+    try:
+        # Make sure this node exists
+        subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, node).split(),
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        print("Node {} does not exist.".format(node))
+        exit(1)
+
+    remove_kubelet_token(node)
+    remove_callback_token(node)
+    subprocess.check_call("{}/microk8s-kubectl.wrapper delete no {}".format(snap_path, node).split(),
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 if __name__ == "__main__":
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "ht:", ["help", "token="])
@@ -266,10 +325,14 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
         else:
-            assert False, "unhandled option"
+            print("Unhandled option")
+            sys.exit(1)
 
     if args[0] == "reset":
-        reset_node()
+        if args[1]:
+            remove_node()
+        else:
+            reset_current_installtion()
     else:
         if token is None:
             print("Please provide a token.")
