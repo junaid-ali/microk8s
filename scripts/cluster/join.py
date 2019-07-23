@@ -6,6 +6,8 @@ import subprocess
 import os
 import getopt
 import sys
+import time
+
 import requests
 import socket
 import json
@@ -231,11 +233,15 @@ def store_base_kubelet_args(args_string):
         fp.write(args_string)
 
 
-def reset_current_installtion():
+def reset_current_installation():
     """
     Take a node out of a cluster
     """
     lock_file = "{}/var/lock/clustered.lock".format(snapdata_path)
+    if not os.path.isfile(lock_file):
+        print("Not in clustering mode.")
+        exit(2)
+
     os.remove(lock_file)
     os.remove(ca_cert_file)
     os.remove(callback_token_file)
@@ -250,7 +256,15 @@ def reset_current_installtion():
         shutil.copyfile("{}.backup".format(config), config)
 
     subprocess.check_call("{}/microk8s-stop.wrapper".format(snap_path).split())
-    subprocess.check_call("{}/microk8s-start.wrapper".format(snap_path).split())
+    waits = 10
+    while waits > 0:
+        try:
+            subprocess.check_call("{}/microk8s-start.wrapper".format(snap_path).split())
+            break
+        except subprocess.CalledProcessError:
+            print("Services not ready to start. Waiting...")
+            time.sleep(5)
+            waits -= 1
 
 
 def remove_kubelet_token(node):
@@ -329,10 +343,10 @@ if __name__ == "__main__":
             sys.exit(1)
 
     if args[0] == "reset":
-        if args[1]:
-            remove_node()
+        if len(args) > 1:
+            remove_node(args[1])
         else:
-            reset_current_installtion()
+            reset_current_installation()
     else:
         if token is None:
             print("Please provide a token.")
