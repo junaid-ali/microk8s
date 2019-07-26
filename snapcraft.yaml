@@ -168,6 +168,7 @@ parts:
     - flask
     stage-packages:
     - python3-requests
+    - gunicorn3
   microk8s:
     after: [containerd]
     plugin: dump
