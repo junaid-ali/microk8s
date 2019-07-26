@@ -9,4 +9,5 @@ export LD_LIBRARY_PATH=$SNAP_LIBRARY_PATH:$LD_LIBRARY_PATH
 # This is really the only way I could find to get the args passed in correctly. WTF
 declare -a args="($(cat $SNAP_DATA/args/cluster-agent))"
 
-${SNAP}/usr/bin/python3 ${SNAP}/scripts/cluster/agent.py "${args[@]}"
+cd ${SNAP}/scripts/
+${SNAP}/usr/bin/gunicorn3 cluster.agent:app "${args[@]}"
