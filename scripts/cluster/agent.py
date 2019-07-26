@@ -254,13 +254,20 @@ def join_node():
     """
     Web call to join an node to the cluster
     """
-    token = request.form['token']
-    hostname = request.form['hostname']
-    port = request.form['port']
-    callback_token = request.form['callback']
+    if request.headers['Content-Type'] == 'application/json':
+        token = request.json['token']
+        hostname = request.json['hostname']
+        port = request.json['port']
+        callback_token = request.json['callback']
+    else:
+        token = request.form['token']
+        hostname = request.form['hostname']
+        port = request.form['port']
+        callback_token = request.form['callback']
 
     if not is_valid(token):
-        return Response("Invalid token provided.", mimetype='text/html', status=500)
+        error_msg={"error": "Invalid token"}
+        return Response(error_msg, mimetype='application/json', status=500)
 
     add_token_to_certs_request(token)
     remove_token_from_file(token, cluster_tokens_file)
@@ -297,7 +304,8 @@ def sign_cert():
     cert_request = request.form['request']
 
     if not is_valid(token, certs_request_tokens_file):
-        return Response("Invalid token provided.", mimetype='text/html', status=500)
+        error_msg={"error": "Invalid token"}
+        return Response(error_msg, mimetype='application/json', status=500)
 
     remove_token_from_file(token, certs_request_tokens_file)
     signed_cert = sign_client_cert(cert_request, token)
@@ -311,7 +319,7 @@ def configure():
     """
     callback_token = request.form['callback']
     if not is_valid(callback_token, callback_token_file):
-        return Response("Invalid token provided.", mimetype='text/html', status=500)
+        return Response("Invalid token", mimetype='text/html', status=500)
 
     configuration = json.loads(request.form['configuration'])
     # We expect something like this:

@@ -45,14 +45,19 @@ def get_connection_info(master_ip, master_port, token, callback_token):
                 cluster_agent_port = cluster_agent_port[-1].split('=')
                 cluster_agent_port = cluster_agent_port[0].rstrip()
 
+    req_data = {"token": token,
+                "hostname": socket.gethostname(),
+                "port": cluster_agent_port,
+                "callback": callback_token}
+
+    # TODO: enable ssl verification
     connection_info = requests.post("https://{}:{}/{}/join".format(master_ip, master_port, CLUSTER_API),
-                                    {"token": token, "hostname": socket.gethostname(),
-                                     "port": cluster_agent_port, "callback": callback_token},
+                                    json=req_data,
                                     verify=False)
     if connection_info.status_code != 200:
-        print("Failed to join cluster. {}".format(connection_info.content.decode('utf-8')))
+        print("Failed to join cluster. {}".format(connection_info.json()["error"]))
         exit(1)
-    return connection_info.content.decode('utf-8')
+    return connection_info.json()
 
 
 def usage():
@@ -96,11 +101,15 @@ def get_etcd_client_cert(master_ip, master_port, token):
     subprocess.check_call(cmd_cert.split())
     with open(cer_req_file) as fp:
         csr = fp.read()
+        req_data = {'token': token, 'request': csr}
+        # TODO: enable ssl verification
         signed = requests.post("https://{}:{}/{}/sign-cert".format(master_ip, master_port, CLUSTER_API),
-                               {'token': token, 'request': csr},
+                               json=req_data,
                                verify=False)
-        info_json = signed.content.decode('utf-8')
-        info = json.loads(info_json)
+        if signed.status_code != 200:
+            print("Failed to sign certificate. {}".format(signed.json()["error"]))
+            exit(1)
+        info = signed.json()
         with open(server_cert_file, "w") as cert_fp:
             cert_fp.write(info["certificate"])
 
@@ -362,8 +371,7 @@ if __name__ == "__main__":
         master_ip = master_ep[0]
         master_port = master_ep[1]
         callback_token = generate_callback_token()
-        connection_info_json = get_connection_info(master_ip, master_port, token, callback_token)
-        info = json.loads(connection_info_json)
+        info = get_connection_info(master_ip, master_port, token, callback_token)
         store_base_kubelet_args(info["kubelet_args"])
         store_remote_ca(info["ca"])
         update_flannel(info["etcd"], master_ip, master_port, token)
