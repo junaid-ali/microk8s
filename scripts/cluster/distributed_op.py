@@ -14,7 +14,7 @@ snap_path = os.environ.get('SNAP')
 callback_tokens_file = "{}/credentials/callback-tokens.txt".format(snapdata_path)
 
 
-def do_op(op_str):
+def do_op(remote_op):
     """
     Perform an operation on a remote node
     :param op_str: the operation json string
@@ -30,11 +30,13 @@ def do_op(op_str):
                 subprocess.check_call("{}/microk8s-kubectl.wrapper get no {}".format(snap_path, host).split(),
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 token = parts[1]
+                remote_op["callback"] = token
+                # TODO: handle ssl verification
                 res = requests.post("https://{}/{}/configure".format(node_ep, CLUSTER_API),
-                                    {"callback": token, "configuration": op_str},
+                                    json=remote_op,
                                     verify=False)
                 if res.status_code != 200:
-                    print("Failed to do {} on {}".format(op_str, node_ep))
+                    print("Failed to perform a {} on node {}".format(remote_op["action_str"], node_ep))
             except subprocess.CalledProcessError:
                 print("Node {} not present".format(host))
 
@@ -45,8 +47,16 @@ def restart(service):
     :param service: the service name
     """
     print("Restarting nodes.")
-    restart_str = "{{\"service\": [{{\"name\": \"{}\", \"restart\": \"yes\"}}]}}".format(service)
-    do_op(restart_str)
+    remote_op = {
+        "action_str": "restart {}".format(service),
+        "service": [
+            {
+                "name": service,
+                "restart": "yes"
+            }
+        ]
+    }
+    do_op(remote_op)
 
 
 def update_argument(service, key, value):
@@ -58,9 +68,18 @@ def update_argument(service, key, value):
     :param value: the value we set
     """
     print("Adding argument {} to nodes.".format(key))
-    op_str = "{{\"service\": [{{\"name\":\"{}\", \"arguments_update\": [{{\"{}\": \"{}\"}}] }}]}}".format(service, key,
-                                                                                                          value)
-    do_op(op_str)
+    remote_op = {
+        "action_str": "change of argument {} to {}".format(key, value),
+        "service": [
+            {
+                "name": service,
+                "arguments_update": [
+                    {key: value}
+                ]
+            }
+        ]
+    }
+    do_op(remote_op)
 
 
 def remove_argument(service, key):
@@ -71,8 +90,16 @@ def remove_argument(service, key):
     :param key: the argument we configure
     """
     print("Removing argument {} from nodes.".format(key))
-    op_str = "{{\"service\": [{{\"name\":\"{}\", \"arguments_remove\": [\"{}\"] }}]}}".format(service, key)
-    do_op(op_str)
+    remote_op = {
+        "action_str": "removal of argument {}".format(key),
+        "service": [
+            {
+                "name": service,
+                "arguments_remove": [key]
+            }
+        ]
+    }
+    do_op(remote_op)
 
 
 def set_addon(addon, state):
@@ -83,8 +110,16 @@ def set_addon(addon, state):
     :param state: 'enable' or 'disable'
     """
     print("Set add-on {} to {} on nodes.".format(addon, state))
-    op_str = "{{\"addon\": [{{\"name\":\"{}\", \"{}\": \"true\" }}]}}".format(addon, state)
-    do_op(op_str)
+    remote_op = {
+        "action_str": "set of {} to {}".format(addon, state),
+        "addon": [
+            {
+                "name": addon,
+                state: "true"
+            }
+        ]
+    }
+    do_op(remote_op)
 
 
 def usage():

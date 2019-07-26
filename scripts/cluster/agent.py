@@ -267,7 +267,7 @@ def join_node():
 
     if not is_valid(token):
         error_msg={"error": "Invalid token"}
-        return Response(error_msg, mimetype='application/json', status=500)
+        return Response(json.dumps(error_msg), mimetype='application/json', status=500)
 
     add_token_to_certs_request(token)
     remove_token_from_file(token, cluster_tokens_file)
@@ -300,12 +300,16 @@ def sign_cert():
     """
     Web call to sign a certificate
     """
-    token = request.form['token']
-    cert_request = request.form['request']
+    if request.headers['Content-Type'] == 'application/json':
+        token = request.json['token']
+        cert_request = request.json['request']
+    else:
+        token = request.form['token']
+        cert_request = request.form['request']
 
     if not is_valid(token, certs_request_tokens_file):
         error_msg={"error": "Invalid token"}
-        return Response(error_msg, mimetype='application/json', status=500)
+        return Response(json.dumps(error_msg), mimetype='application/json', status=500)
 
     remove_token_from_file(token, certs_request_tokens_file)
     signed_cert = sign_client_cert(cert_request, token)
@@ -317,14 +321,21 @@ def configure():
     """
     Web call to configure the node
     """
-    callback_token = request.form['callback']
-    if not is_valid(callback_token, callback_token_file):
-        return Response("Invalid token", mimetype='text/html', status=500)
+    if request.headers['Content-Type'] == 'application/json':
+        callback_token = request.json['callback']
+        configuration = request.json
+    else:
+        callback_token = request.form['callback']
+        configuration = json.loads(request.form['configuration'])
 
-    configuration = json.loads(request.form['configuration'])
+    if not is_valid(callback_token, callback_token_file):
+        error_msg={"error": "Invalid token"}
+        return Response(json.dumps(error_msg), mimetype='application/json', status=500)
+
     # We expect something like this:
     '''
     {
+      "callback": "xyztoken"
       "service":
       [
         {
@@ -389,7 +400,9 @@ def configure():
                 print("Disabling {}".format(addon["name"]))
                 subprocess.check_call("{}/microk8s-disable.wrapper {}".format(snap_path, addon["name"]).split())
 
-    return "ok"
+    resp_date = {"result": "ok"}
+    resp = Response(json.dumps(resp_date), status=200, mimetype='application/json')
+    return resp
 
 
 def usage():
