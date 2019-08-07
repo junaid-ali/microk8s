@@ -61,7 +61,7 @@ def get_connection_info(master_ip, master_port, token, callback_token):
 
 
 def usage():
-    print("Join a cluster: microk8s.join <master>:<port> --token=<token>")
+    print("Join a cluster: microk8s.join <master>:<port>/<token>")
 
 
 def set_arg(key, value, file):
@@ -335,16 +335,13 @@ def remove_node(node):
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "ht:", ["help", "token="])
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help"])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         usage()
         sys.exit(2)
-    token = None
     for o, a in opts:
-        if o in ("-t", "--token"):
-            token = a
-        elif o in ("-h", "--help"):
+        if o in ("-h", "--help"):
             usage()
             sys.exit(1)
         else:
@@ -357,17 +354,14 @@ if __name__ == "__main__":
         else:
             reset_current_installation()
     else:
-        if token is None:
-            print("Please provide a token.")
-            usage()
-            sys.exit(3)
-
         if len(args) <= 0:
-            print("Please provide a master endpoint and a token.")
+            print("Please provide a connection string.")
             usage()
             sys.exit(4)
 
-        master_ep = args[0].split(":")
+        connection_parts = args[0].split("/")
+        token = connection_parts[1]
+        master_ep = connection_parts[0].split(":")
         master_ip = master_ep[0]
         master_port = master_ep[1]
         callback_token = generate_callback_token()
